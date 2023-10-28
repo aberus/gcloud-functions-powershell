@@ -3,13 +3,13 @@ using Google.Cloud.Functions.Hosting;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace Google.Cloud.Functions.PowerShellHost;
+namespace Aberus.Google.Cloud.Functions.Framework;
 
-public class Startup : FunctionsStartup
+public class PowerShellFunctionStartup : FunctionsStartup
 {
     public override void ConfigureServices(WebHostBuilderContext context, IServiceCollection services) =>
         services
-            .AddSingleton<IPowerShellHost, PowerShellHost>()
+            .AddSingleton<IPowerShellRunner, PowerShellRunner>()
             .AddSingleton<IHttpRequestReader<HttpRequest>, HttpRequestReader>()
             .AddSingleton<IHttpResponseWriter<HttpResponse>, HttpResponseWriter>();
 }

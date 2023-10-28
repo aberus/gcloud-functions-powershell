@@ -6,23 +6,23 @@ using System;
 using System.IO;
 using System.Threading.Tasks;
 
-namespace Google.Cloud.Functions.PowerShellHost;
+namespace Aberus.Google.Cloud.Functions.Framework;
 
-[FunctionsStartup(typeof(Startup))]
-public class PowerShellFunction : IHttpFunction
+[FunctionsStartup(typeof(PowerShellFunctionStartup))]
+public abstract class PowerShellFunction : IHttpFunction
 {
-    private readonly IPowerShellHost _powerShellHost;
+    private readonly IPowerShellRunner _powerShellRunner;
     private readonly IHttpRequestReader<HttpRequest> _requestReader;
     private readonly IHttpResponseWriter<HttpResponse> _responseWriter;
     private readonly ILogger _logger;
 
-    public PowerShellFunction(
-        IPowerShellHost powerShellHost,
+    protected PowerShellFunction(
+        IPowerShellRunner powerShellRunner,
         IHttpRequestReader<HttpRequest> requestReader,
         IHttpResponseWriter<HttpResponse> responseWriter,
         ILogger<PowerShellFunction> logger)
     {
-        _powerShellHost = powerShellHost;
+        _powerShellRunner = powerShellRunner;
         _requestReader = requestReader;
         _responseWriter = responseWriter;
         _logger = logger;
@@ -33,7 +33,7 @@ public class PowerShellFunction : IHttpFunction
         HttpRequest data;
         try
         {
-            data = await _requestReader.ReadRequestAsync(context.Request);
+            data = await _requestReader.ReadRequestAsync(context.Request).ConfigureAwait(false);
         }
         catch (Exception e)
         {
@@ -42,10 +42,11 @@ public class PowerShellFunction : IHttpFunction
             return;
         }
 
-        var response = await _powerShellHost.RunScriptAsync(File.ReadAllText("function.ps1"), data, context.RequestAborted);
+        var script = await File.ReadAllTextAsync("function.ps1", context.RequestAborted).ConfigureAwait(false);
+        var response = await _powerShellRunner.RunScriptAsync(script, data, context.RequestAborted).ConfigureAwait(false);
         try
         {
-            await _responseWriter.WriteResponseAsync(context.Response, response);
+            await _responseWriter.WriteResponseAsync(context.Response, response).ConfigureAwait(false);
         }
         catch (Exception e)
         {
@@ -75,14 +76,11 @@ public class PowerShellFunction : IHttpFunction
 //    return "{" + string.Join(",", keyValuePairs) + "}";
 //  }
 
-
-
 //  /// <summary>The Metadata flavor header name.</summary>
 //  internal const string MetadataFlavor = "Metadata-Flavor";
 
 //  /// <summary>The Metadata header response indicating Google.</summary>
 //  internal const string GoogleMetadataHeader = "Google";
-
 
 //  // Constant strings to avoid duplication below.
 //  // IP address instead of name to avoid DNS resolution
@@ -116,11 +114,8 @@ public class PowerShellFunction : IHttpFunction
 //  //_logger.LogInformation(RuntimeInformation.IsOSPlatform(OSPlatform.Windows).ToString());
 //  //_logger.LogInformation(ToDebugString(Environment.GetEnvironmentVariables()));
 
-
 //  //var googleAppCreds = Environment.GetEnvironmentVariable("GOOGLE_APPLICATION_CREDENTIALS");
 //  //_logger.LogInformation(googleAppCreds);
-
-
 
 //  //var httpRequest = new HttpRequestMessage(HttpMethod.Get, EffectiveComputeDefaultProjectIdUrl);
 //  //httpRequest.Headers.Add(MetadataFlavor, GoogleMetadataHeader);
@@ -139,8 +134,6 @@ public class PowerShellFunction : IHttpFunction
 //  //var y = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
 
 //  //_logger.LogInformation(y);
-
-
 
 //  //var xx = context.Request.Headers.Select(x => (x.Key, Value:x.Value.FirstOrDefault())).ToDictionary(x => x.Key);
 

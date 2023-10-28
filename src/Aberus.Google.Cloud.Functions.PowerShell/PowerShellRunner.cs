@@ -8,16 +8,16 @@ using System.Management.Automation.Runspaces;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace Google.Cloud.Functions.PowerShellHost;
+namespace Aberus.Google.Cloud.Functions.Framework;
 
-public class PowerShellHost : IPowerShellHost
+public class PowerShellRunner : IPowerShellRunner
 {
     private readonly IWebHostEnvironment _environment;
     private readonly ILogger _logger;
 
     private readonly PowerShell _powerShell;
 
-    public PowerShellHost(IWebHostEnvironment environment, ILogger<PowerShellHost> logger)
+    public PowerShellRunner(IWebHostEnvironment environment, ILogger<PowerShellRunner> logger)
     {
         _environment = environment;
         _logger = logger;
@@ -40,11 +40,7 @@ public class PowerShellHost : IPowerShellHost
         }
 
         string functionModulePath = Path.Join(_environment.ContentRootPath, "Modules");
-        //state.EnvironmentVariables.Add(new SessionStateVariableEntry("PSModulePath", functionModulePath, description: null));
-
-#if DEBUG
-        state.EnvironmentVariables.Add(new SessionStateVariableEntry("APIKEY", "test", description: null));
-#endif
+        state.EnvironmentVariables.Add(new SessionStateVariableEntry("PSModulePath", functionModulePath, description: null));
 
         var powerShell = PowerShell.Create(state);
         powerShell.Streams.Error.DataAdding += LogErrorDataAdding;
@@ -61,20 +57,20 @@ public class PowerShellHost : IPowerShellHost
     {
         try
         {
-            _powerShell.AddScript(script);
-            _powerShell.AddParameter("Request", request);
-
-             var results = await Task.Run(() => _powerShell.InvokeAsync(), cancellationToken);
-
             _powerShell.Commands?.Clear();
             _powerShell.Streams.Verbose?.Clear();
             _powerShell.Streams.Error?.Clear();
             _powerShell.Runspace?.ResetRunspaceState();
 
+            _powerShell.AddScript(script);
+            _powerShell.AddParameter("Request", request);
+
+            var results = await _powerShell.InvokeAsync().WithCancellation(cancellationToken).ConfigureAwait(false);
+
             if (_powerShell.HadErrors)
             {
                 string errorMessage = string.Join(Environment.NewLine, _powerShell.Streams.Error!);
-                _logger.LogError(errorMessage);
+                _logger.LogError("PowerShell errors: {message}", errorMessage);
             }
 
             var lastResult = results?.LastOrDefault();
@@ -85,14 +81,13 @@ public class PowerShellHost : IPowerShellHost
                 var obj when obj?.BaseObject is { } baseObject => new HttpResponse { Body = baseObject },
                 null => new HttpResponse { Body = string.Empty },
                 _ => new HttpResponse { Body = string.Empty },
-
             };
 
             return result;
         }
         catch (Exception ex)
         {
-            _logger.LogError($"Exception occurred: {ex.Message}");
+            _logger.LogError("Exception occurred: {message}", ex.Message);
             return new HttpResponse { StatusCode = 500 };
         }
     }
@@ -117,7 +112,7 @@ public class PowerShellHost : IPowerShellHost
     {
         if (e.ItemAdded is InformationRecord record)
         {
-            if (record.Tags.Count == 1 && record.Tags[0] == "__PipelineObject__" || record.Tags[0] == "PSHOST")
+            if (record.Tags.Count == 1 && (string.Equals(record.Tags[0], "__PipelineObject__", StringComparison.Ordinal) || string.Equals(record.Tags[0], "PSHOST", StringComparison.Ordinal)))
             {
                 _logger.LogInformation("OUTPUT: {messageData}", record.MessageData);
             }
